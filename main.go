@@ -51,6 +51,7 @@ func NewCache(
 			return nil, 0, fmt.Errorf("key not fetchable")
 		}
 
+		fmt.Println("Fetching thru network")
 		ttl = time.Second * 30
 		data, err = getFromNetwork(key)
 
