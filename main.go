@@ -115,23 +115,22 @@ func NewCache(config *config) *cache {
 
 		c.Set(key, value)
 	})
-	// c.SetLoaderFunction(func(key string) (data interface{}, ttl time.Duration, err error) {
-	// 	res, err := loader(key)
-	// 	if err != nil {
-	// 		return nil, 0, err
-	// 	}
+	c.SetLoaderFunction(func(key string) (data interface{}, ttl time.Duration, err error) {
+		res, err := loader(key)
+		if err != nil {
+			return nil, 0, err
+		}
 
-	// 	return res, config.globalTTL, nil
-	// })
+		return res, config.globalTTL, nil
+	})
 
-	// populate cache => should be all keys
-	res, err := loader("REDEEM_ESTIMATE")
-	if err != nil {
-		log.Printf("Error fetching from network: %v\n", err)
-		panic(err) // TODO: handle error
-	}
-
-	c.Set("REDEEM_ESTIMATE", res)
+	// // populate cache => should be all keys
+	// res, err := loader("REDEEM_ESTIMATE")
+	// if err != nil {
+	// 	log.Printf("Error fetching from network: %v\n", err)
+	// 	panic(err) // TODO: handle error
+	// }
+	// c.Set("REDEEM_ESTIMATE", res)
 
 	return &cache{
 		cacheEngine: c,
