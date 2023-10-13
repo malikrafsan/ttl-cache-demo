@@ -1,0 +1,41 @@
+calling campaign service...
+calling campaign service...
+calling campaign service...
+Listening on port 9999
+This key(REDEEM_ESTIMATE) has expired because of Expired
+calling campaign service...
+This key(FEE_EVALUATE) has expired because of Expired
+calling campaign service...
+This key(FEE_APPLY) has expired because of Expired
+calling campaign service...
+This key(REDEEM_ESTIMATE) has expired because of Expired
+calling campaign service...
+This key(FEE_EVALUATE) has expired because of Expired
+calling campaign service...
+================================
+metrics: {Inserted:12 Retrievals:0 Hits:0 Misses:0 Evicted:5}
+keys: [REDEEM_ESTIMATE FEE_EVALUATE FEE_APPLY]
+countCallThruService: 8
+================================
+================================
+metrics: {Inserted:12 Retrievals:1 Hits:1 Misses:0 Evicted:5}
+keys: [REDEEM_ESTIMATE FEE_EVALUATE FEE_APPLY]
+countCallThruService: 8
+================================
+================================
+metrics: {Inserted:12 Retrievals:2 Hits:2 Misses:0 Evicted:5}
+keys: [REDEEM_ESTIMATE FEE_EVALUATE FEE_APPLY]
+countCallThruService: 8
+================================
+This key(FEE_APPLY) has expired because of Expired
+calling campaign service...
+================================
+metrics: {Inserted:14 Retrievals:3 Hits:3 Misses:0 Evicted:6}
+keys: [REDEEM_ESTIMATE FEE_EVALUATE FEE_APPLY]
+countCallThruService: 9
+================================
+================================
+metrics: {Inserted:14 Retrievals:4 Hits:4 Misses:0 Evicted:6}
+keys: [FEE_APPLY REDEEM_ESTIMATE FEE_EVALUATE]
+countCallThruService: 9
+================================
