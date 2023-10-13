@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jellydator/ttlcache/v2"
@@ -80,6 +81,8 @@ type cache struct {
 	config      *config
 	cacheEngine *ttlcache.Cache
 	caller      *campaignCaller
+	mutex       sync.Mutex
+	loading     map[string]bool
 }
 
 func NewCache(config *config) *cache {
@@ -89,54 +92,12 @@ func NewCache(config *config) *cache {
 
 	campaignCaller := NewCampaignCaller()
 
-	loader := func(key string) (interface{}, error) {
-		validTypes, ok := flowType[key]
-		if !ok {
-			return nil, fmt.Errorf("invalid key")
-		}
-
-		campaigns, err := campaignCaller.LiveByTypes(context.Background() /* TODO */, validTypes...)
-		if err != nil {
-			return nil, err
-		}
-
-		return campaigns, nil
-	}
-
-	c.SetExpirationReasonCallback(func(key string, reason ttlcache.EvictionReason, value interface{}) {
-		fmt.Printf("This key(%s) has expired because of %s\n", key, reason)
-		c.Set(key, value)
-
-		value, err := loader(key)
-		if err != nil {
-			log.Printf("Error fetching from network: %v\n", err)
-			return
-		}
-
-		c.Set(key, value)
-	})
-	// c.SetLoaderFunction(func(key string) (data interface{}, ttl time.Duration, err error) {
-	// 	res, err := loader(key)
-	// 	if err != nil {
-	// 		return nil, 0, err
-	// 	}
-
-	// 	return res, config.globalTTL, nil
-	// })
-
-	// populate cache => should be all keys
-	// res, err := loader("REDEEM_ESTIMATE")
-	// if err != nil {
-	// 	log.Printf("Error fetching from network: %v\n", err)
-	// 	panic(err) // TODO: handle error
-	// }
-
-	// c.Set("REDEEM_ESTIMATE", res)
-
 	return &cache{
 		cacheEngine: c,
 		config:      config,
 		caller:      campaignCaller,
+		mutex:       sync.Mutex{},
+		loading:     map[string]bool{},
 	}
 }
 
@@ -150,23 +111,59 @@ func (c *cache) LiveByTypes(ctx context.Context, key string) ([]campaign, error)
 		return c.caller.LiveByTypes(ctx, validTypes...)
 	}
 
-	loader := func(key string) (interface{}, time.Duration, error) {
+	loader := func(key string) (interface{}, error) {
 		validTypes, ok := flowType[key]
 		if !ok {
-			return nil, 0, fmt.Errorf("invalid key")
+			return nil, fmt.Errorf("invalid key")
 		}
 
 		campaigns, err := c.caller.LiveByTypes(ctx, validTypes...)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 
-		return campaigns, c.config.globalTTL, nil
+		return campaigns, nil
 	}
 
-	campaigns, err := c.cacheEngine.GetByLoader(key, loader)
+	campaigns, err := c.cacheEngine.Get(key)
 	if err != nil {
-		return nil, err
+		c.mutex.Lock()
+		shouldCall := false
+		if val, ok := c.loading[key]; !ok || !val {
+			shouldCall = true
+			c.loading[key] = true
+		}
+		c.mutex.Unlock()
+
+		if shouldCall {
+			// call campaign service
+			// renew cache value
+			go func() {
+				value, err := loader(key)
+				if err != nil {
+					log.Printf("Error fetching from network: %v\n", err)
+					return
+				}
+
+				c.cacheEngine.Set(key, value)
+				c.cacheEngine.SetWithTTL(fmt.Sprintf("persist:%s", key), value, time.Hour*24*30) // TODO: make it configurable
+
+				c.mutex.Lock()
+				c.loading[key] = false
+				c.mutex.Unlock()
+			}()
+		}
+
+		val, err := c.cacheEngine.Get(fmt.Sprintf("persist:%s", key))
+		if err != nil {
+			// if not found in cache, call campaign service (synchonously)
+			val, err = loader(key)
+			if err != nil {
+				return nil, err
+			}
+			return val.([]campaign), nil
+		}
+		return val.([]campaign), nil
 	}
 
 	return campaigns.([]campaign), nil

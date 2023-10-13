@@ -1,25 +1,7 @@
-const getFetchable = async () => {
-    const res = await fetch('http://localhost:9999/[fetchable] key')
-    const data = await res.text();
-    console.log("getFetchable", data);
-}
-
-const getTimeless = async () => {
-    const res = await fetch('http://localhost:9999/[timeless] key')
-    const data = await res.text();
-    console.log("getTimeless", data);
-}
-
-const getRegular = async () => {
-    const res = await fetch('http://localhost:9999/[regular] key')
-    const data = await res.text();
-    console.log("getRegular", data);
-}
-
 const getRedeemEstimate = async () => {
     const res = await fetch('http://localhost:9999/REDEEM_ESTIMATE')
     const data = await res.text();
-    console.log("getRedeemEstimate", data);
+    return `getRedeemEstimate ${data}`
 }
 
 const randomCancel = (fn) => {
@@ -39,23 +21,15 @@ const timer = {
 }
 
 const main = async () => {
-    // let counter = 10;
-    // const interval = setInterval(() => {
-    //     console.log("counter", counter);
-    //     getFetchable();
-    //     counter--;
-    //     if (counter === 0) {
-    //         clearInterval(interval);
-    //     }
-    // }, 1000)
-
-    // setInterval(getTimeless, timer.timeless);
-    // setInterval(getRegular, timer.regular);
     let counter = 0;
-    setInterval(() => {
+    setInterval(async () => {
         console.log("counter", counter);
-        getRedeemEstimate();
         counter++;
+
+        const startTime = performance.now();
+        const data = await getRedeemEstimate();
+        const endTime = performance.now(); 
+        console.log("data", data, "elapsed", endTime - startTime, "ms");
     }, timer.redeemEstimate);
 }
 
