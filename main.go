@@ -125,13 +125,13 @@ func NewCache(config *config) *cache {
 	// })
 
 	// populate cache => should be all keys
-	res, err := loader("REDEEM_ESTIMATE")
-	if err != nil {
-		log.Printf("Error fetching from network: %v\n", err)
-		panic(err) // TODO: handle error
-	}
+	// res, err := loader("REDEEM_ESTIMATE")
+	// if err != nil {
+	// 	log.Printf("Error fetching from network: %v\n", err)
+	// 	panic(err) // TODO: handle error
+	// }
 
-	c.Set("REDEEM_ESTIMATE", res)
+	// c.Set("REDEEM_ESTIMATE", res)
 
 	return &cache{
 		cacheEngine: c,
@@ -150,21 +150,21 @@ func (c *cache) LiveByTypes(ctx context.Context, key string) ([]campaign, error)
 		return c.caller.LiveByTypes(ctx, validTypes...)
 	}
 
-	// loader := func(key string) (interface{}, time.Duration, error) {
-	// 	validTypes, ok := flowType[key]
-	// 	if !ok {
-	// 		return nil, 0, fmt.Errorf("invalid key")
-	// 	}
+	loader := func(key string) (interface{}, time.Duration, error) {
+		validTypes, ok := flowType[key]
+		if !ok {
+			return nil, 0, fmt.Errorf("invalid key")
+		}
 
-	// 	campaigns, err := c.caller.LiveByTypes(ctx, validTypes...)
-	// 	if err != nil {
-	// 		return nil, 0, err
-	// 	}
+		campaigns, err := c.caller.LiveByTypes(ctx, validTypes...)
+		if err != nil {
+			return nil, 0, err
+		}
 
-	// 	return campaigns, c.config.globalTTL, nil
-	// }
+		return campaigns, c.config.globalTTL, nil
+	}
 
-	campaigns, err := c.cacheEngine.Get(key)
+	campaigns, err := c.cacheEngine.GetByLoader(key, loader)
 	if err != nil {
 		return nil, err
 	}
