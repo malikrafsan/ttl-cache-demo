@@ -23,13 +23,13 @@ const timer = {
 const main = async () => {
     let counter = 0;
     setInterval(async () => {
-        console.log("counter", counter);
+        let localCounter = counter;
         counter++;
 
         const startTime = performance.now();
         const data = await getRedeemEstimate();
         const endTime = performance.now(); 
-        console.log("data", data, "elapsed", endTime - startTime, "ms");
+        console.log("request", localCounter, "data", data, "elapsed", endTime - startTime, "ms");
     }, timer.redeemEstimate);
 }
 

@@ -135,6 +135,8 @@ func (c *cache) LiveByTypes(ctx context.Context, key string) ([]campaign, error)
 		}
 		c.mutex.Unlock()
 
+		fmt.Printf("shouldCall: %v; %+v\n", shouldCall, c.loading)
+
 		if shouldCall {
 			// call campaign service
 			// renew cache value
@@ -157,10 +159,14 @@ func (c *cache) LiveByTypes(ctx context.Context, key string) ([]campaign, error)
 		val, err := c.cacheEngine.Get(fmt.Sprintf("persist:%s", key))
 		if err != nil {
 			// if not found in cache, call campaign service (synchonously)
+			// cons: it will block the request and call multiple times if there are multiple requests
+			// alternative: return nil, error
+
 			val, err = loader(key)
 			if err != nil {
 				return nil, err
 			}
+			c.cacheEngine.Set(key, val)
 			return val.([]campaign), nil
 		}
 		return val.([]campaign), nil
