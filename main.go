@@ -115,6 +115,14 @@ func NewCache(config *config) *cache {
 
 		c.Set(key, value)
 	})
+	// c.SetLoaderFunction(func(key string) (data interface{}, ttl time.Duration, err error) {
+	// 	res, err := loader(key)
+	// 	if err != nil {
+	// 		return nil, 0, err
+	// 	}
+
+	// 	return res, config.globalTTL, nil
+	// })
 
 	// populate cache => should be all keys
 	res, err := loader("REDEEM_ESTIMATE")
@@ -141,6 +149,20 @@ func (c *cache) LiveByTypes(ctx context.Context, key string) ([]campaign, error)
 
 		return c.caller.LiveByTypes(ctx, validTypes...)
 	}
+
+	// loader := func(key string) (interface{}, time.Duration, error) {
+	// 	validTypes, ok := flowType[key]
+	// 	if !ok {
+	// 		return nil, 0, fmt.Errorf("invalid key")
+	// 	}
+
+	// 	campaigns, err := c.caller.LiveByTypes(ctx, validTypes...)
+	// 	if err != nil {
+	// 		return nil, 0, err
+	// 	}
+
+	// 	return campaigns, c.config.globalTTL, nil
+	// }
 
 	campaigns, err := c.cacheEngine.Get(key)
 	if err != nil {
