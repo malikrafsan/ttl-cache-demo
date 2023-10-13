@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"log"
@@ -11,118 +12,160 @@ import (
 	"github.com/jellydator/ttlcache/v2"
 )
 
-const (
-	defaultValue = "default"
-)
-
-const (
-	timelessKey  = "[timeless] key"
-	fetchableKey = "[fetchable] key"
-	regularKey   = "[regular] key"
-)
+var countCallThruService = 0
 
 type config struct {
 	globalTTL      time.Duration
 	cacheSizeLimit int
+	enableCache    bool
+}
+
+type CampaignType int
+
+const (
+	CampaignRandomizedCashback CampaignType = iota
+	CampaignLegacyCampaign
+	CampaignRcPartners
+	CampaignCoupon
+	CampaignPromoCode
+	CampaignSkuPromo
+	CampaignFeeCampaign
+	CampaignAll
+)
+
+var flowType map[string][]CampaignType = map[string][]CampaignType{
+	"REDEEM_ESTIMATE": {
+		CampaignLegacyCampaign, CampaignRandomizedCashback, CampaignRcPartners,
+	},
+	"FEE_EVALUATE": {
+		CampaignFeeCampaign,
+	},
+	"FEE_APPLY": {
+		CampaignFeeCampaign,
+	},
+}
+
+type campaign struct {
+	ID   string
+	Name string
+	Desc string
+}
+
+type campaignCaller struct{}
+
+func NewCampaignCaller() *campaignCaller {
+	return &campaignCaller{}
+}
+
+func (c *campaignCaller) LiveByTypes(ctx context.Context, campaignTypes ...CampaignType) ([]campaign, error) {
+	fmt.Println("calling campaign service...")
+	countCallThruService++
+	time.Sleep(4 * time.Second)
+
+	id := time.Now().UnixNano()
+
+	campaigns := []campaign{}
+	for _, campaignType := range campaignTypes {
+		campaigns = append(campaigns, campaign{
+			ID:   fmt.Sprintf("id:%d", id),
+			Name: fmt.Sprintf("name:%d", campaignType),
+			Desc: fmt.Sprintf("desc:%d", campaignType),
+		})
+	}
+
+	return campaigns, nil
 }
 
 type cache struct {
+	config      *config
 	cacheEngine *ttlcache.Cache
+	caller      *campaignCaller
 }
 
-func NewCache(
-	config *config,
-) *cache {
-	// callback fn for new item to be added
-	newItemCallback := func(key string, value interface{}) {
-		fmt.Printf("New key (%s) added\n\t with value: (%v)\n", key, value)
-	}
-	// // callback fn for expiration checking before deletion
-	checkExpirationCallback := func(key string, value interface{}) bool {
-		return !strings.HasPrefix(key, "[timeless]")
-	}
-	// callback fn after expiration
-	expirationReasonCallback := func(key string, reason ttlcache.EvictionReason, value interface{}) {
-		fmt.Printf("This key(%s) has expired because of %s\n", key, reason)
-	}
-	// callback fn for loading data on cache miss
-	loaderFunction := func(key string) (data interface{}, ttl time.Duration, err error) {
-		if !strings.HasPrefix(key, "[fetchable]") {
-			return nil, 0, fmt.Errorf("key not fetchable")
-		}
-
-		fmt.Println("Fetching thru network")
-		ttl = time.Second * 30
-		data, err = getFromNetwork(key)
-
-		return data, ttl, err
-	}
-
+func NewCache(config *config) *cache {
 	c := ttlcache.NewCache()
-	c.SetTTL(config.globalTTL)
-	c.SetExpirationReasonCallback(expirationReasonCallback)
-	c.SetLoaderFunction(loaderFunction)
-	c.SetNewItemCallback(newItemCallback)
-	c.SetCheckExpirationCallback(checkExpirationCallback)
-	c.SetCacheSizeLimit(config.cacheSizeLimit)
+	// c.SkipTTLExtensionOnHit(true)
+
+	campaignCaller := NewCampaignCaller()
+
+	// c.SetExpirationReasonCallback(func(key string, reason ttlcache.EvictionReason, value interface{}) {
+	// 	c.Set(key, value)
+	// })
 
 	return &cache{
 		cacheEngine: c,
+		config:      config,
+		caller:      campaignCaller,
 	}
 }
 
-func (c *cache) Set(key string, value interface{}) error {
-	return c.cacheEngine.Set(key, value)
+func (c *cache) LiveByTypes(ctx context.Context, key string) ([]campaign, error) {
+	if !c.config.enableCache {
+		validTypes, ok := flowType[key]
+		if !ok {
+			return nil, fmt.Errorf("invalid key")
+		}
+
+		return c.caller.LiveByTypes(ctx, validTypes...)
+	}
+
+	loader := func(key string) (interface{}, time.Duration, error) {
+		validTypes, ok := flowType[key]
+		if !ok {
+			return nil, 0, fmt.Errorf("invalid key")
+		}
+
+		campaigns, err := c.caller.LiveByTypes(ctx, validTypes...)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		return campaigns, c.config.globalTTL, nil
+	}
+
+	campaigns, err := c.cacheEngine.GetByLoader(key, loader)
+	if err != nil {
+		return nil, err
+	}
+
+	return campaigns.([]campaign), nil
 }
 
-func (c *cache) SetWithTTL(key string, value interface{}, ttl time.Duration) error {
-	return c.cacheEngine.SetWithTTL(key, value, ttl)
-}
-
-func (c *cache) Get(key string) (interface{}, error) {
-	return c.cacheEngine.Get(key)
-}
-
-func randomGenerator() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
-}
+const (
+	cacheMiss = "cache miss"
+)
 
 func main() {
-	config := config{
-		globalTTL:      time.Duration(4 * time.Second),
+	config := &config{
+		globalTTL:      10 * time.Second,
 		cacheSizeLimit: 10,
+		enableCache:    true,
 	}
-	cache := NewCache(&config)
-
-	ticker := time.NewTicker(15 * time.Second)
-	go func() {
-		for t := range ticker.C {
-			key := regularKey
-			value := randomGenerator()
-			log.Printf("Set (%v) with value (%v) at: %v\n", key, value, t.UTC())
-			cache.Set(key, value)
-		}
-	}()
-
-	cache.Set(timelessKey, "timeless")
+	cache := NewCache(config)
+	ctx := context.Background()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// metrics
+		fmt.Println("================================")
+		// print cache metric
+		metrics := cache.cacheEngine.GetMetrics()
+		fmt.Printf("metrics: %+v\n", metrics)
+		keys := cache.cacheEngine.GetKeys()
+		fmt.Printf("keys: %+v\n", keys)
+		fmt.Printf("countCallThruService: %d\n", countCallThruService)
+		fmt.Println("================================")
+
 		key := html.EscapeString(r.URL.Path)
 		cleanKey := strings.TrimPrefix(key, "/")
 
-		if value, err := cache.Get(cleanKey); err == nil {
+		if value, err := cache.LiveByTypes(ctx, cleanKey); err == nil {
 			fmt.Fprintf(w, "%v", value)
 			return
 		}
 
-		fmt.Fprintf(w, "%v", defaultValue)
+		fmt.Fprintf(w, "%v", cacheMiss)
 	})
 
 	fmt.Println("Listening on port 9999")
 	log.Fatal(http.ListenAndServe(":9999", nil))
-}
-
-func getFromNetwork(key string) (string, error) {
-	time.Sleep(time.Second * 3)
-	return "fetched-value", nil
 }
